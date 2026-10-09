@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Forecast Studio · Sales & Revenue Predictor</title>
+<style>
+:root{--bg:#f6f4ee;--card:#fff;--ink:#1c2321;--mut:#667;--line:#e3dfd3;--a:#0f5f55;--b:#c77d0a;--pos:#15803d;--neg:#b91c1c;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#121816;--card:#1b2321;--ink:#eceae2;--mut:#9aa6a1;--line:#2c3733;--a:#3fb5a5;--b:#f0a63a;--pos:#4ade80;--neg:#f87171}}
+:root[data-theme="dark"]{--bg:#121816;--card:#1b2321;--ink:#eceae2;--mut:#9aa6a1;--line:#2c3733;--a:#3fb5a5;--b:#f0a63a;--pos:#4ade80;--neg:#f87171}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 "Segoe UI",system-ui,-apple-system,sans-serif}
+.w{max-width:1100px;margin:0 auto;padding:18px 14px 40px}
+h1{font:700 24px Georgia,serif;margin:0}h2{font:600 16px Georgia,serif;margin:0 0 8px}
+.sub{color:var(--mut);font-size:13px;margin:2px 0 12px}
+.tb{display:flex;flex-wrap:wrap;gap:10px 14px;align-items:center;margin-bottom:10px;font-size:13px}
+select,input[type=number],textarea{padding:5px 7px;border:1px solid var(--line);border-radius:6px;background:var(--card);color:var(--ink);font:inherit;font-size:13px;max-width:100%}
+input[type=range]{accent-color:var(--a);vertical-align:middle;width:110px}
+.tabs{display:flex;gap:4px;border-bottom:1px solid var(--line);margin:6px 0 14px;overflow-x:auto}
+.tabs button{background:none;border:0;padding:9px 14px;color:var(--mut);font:600 14px inherit;cursor:pointer;border-bottom:3px solid transparent;white-space:nowrap}
+.tabs button.on{color:var(--a);border-color:var(--a)}
+.btn{background:var(--a);color:#fff;border:0;border-radius:8px;padding:8px 14px;cursor:pointer;font:600 13px inherit}.btn.o{background:none;color:var(--a);border:1px solid var(--a)}
+.g{display:grid;gap:12px}.k{grid-template-columns:repeat(auto-fit,minmax(170px,1fr))}.c2{grid-template-columns:repeat(auto-fit,minmax(330px,1fr))}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px;min-width:0}
+.kv{font:700 22px Georgia,serif}.kl{font-size:11.5px;color:var(--mut);text-transform:uppercase;letter-spacing:.04em}.kd{font-size:12.5px;color:var(--mut)}
+.pos{color:var(--pos)}.neg{color:var(--neg)}
+svg{width:100%;height:auto;display:block}svg text{fill:var(--mut);font-size:10px}
+.sc{overflow-x:auto}table{border-collapse:collapse;width:100%;font-size:13px}
+th,td{padding:6px 8px;border-bottom:1px solid var(--line);text-align:right;white-space:nowrap}th:first-child,td:first-child{text-align:left}th{color:var(--mut);font-weight:600}
+.lg{display:flex;flex-wrap:wrap;gap:4px 12px;font-size:12px;color:var(--mut);margin-top:6px}.lg i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:4px}
+.rec{border-left:4px solid var(--a)}.rec.h{border-color:var(--b)}.tag{font-size:11px;font-weight:700;padding:2px 7px;border-radius:99px;background:var(--bg);border:1px solid var(--line);margin-left:6px}
+.up{font:700 17px Georgia,serif;color:var(--pos)}.note{font-size:12.5px;color:var(--mut);margin-top:10px}
+.drop{border:2px dashed var(--line);border-radius:12px;padding:22px;text-align:center}
+ul{margin:6px 0 0;padding-left:18px}li{margin:3px 0}.warn{color:var(--b)}
+</style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+</head><body><div class="w">
+<h1>Forecast Studio</h1>
+<div class="sub">Upload sales data from any industry → auto-detected forecast, accuracy test, segment view and growth plan</div>
+<div class="tb">
+<label>Currency <select id="cur"></select></label>
+<label>Industry <select id="ind"></select></label>
+<label>Horizon <select id="hz"><option value="6">6 mo</option><option value="12" selected>12 mo</option><option value="24">24 mo</option></select></label>
+<label>Model <select id="me"><option value="auto">Auto (best backtest)</option><option value="trend">Linear trend</option><option value="seasonal">Seasonal trend</option><option value="hw">Holt-Winters</option></select></label>
+<label>Extra growth assumption <input type="range" id="ex" min="-20" max="30" value="0"> <b id="exv">0%</b>/yr</label>
+</div>
+<div class="tabs" id="tabs"></div><div id="v"></div>
+<div class="note">Forecasts are statistical projections from the uploaded history, not guarantees. Data stays in your browser: nothing is uploaded to a server.</div>
+</div>
+<script>
+const MN=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'],COL=['#0f766e','#d97706','#6366f1','#be185d','#0891b2','#65a30d','#9333ea','#dc2626','#78716c'];
+const CUR=['INR','USD','EUR','GBP','AED','SGD','AUD','CAD','JPY'];
+const IND={general:{n:'General / Other',t:['Track forecast vs actual every month and re-run with fresh data','Tie sales targets to the forecast range, not a single number','Review top-3 products or customers quarterly for concentration risk']},
+pharma:{n:'Pharma & Healthcare',t:['Align field-force and sampling effort with seasonal therapy peaks (e.g. infections, respiratory)','Protect supply: set safety stock using the forecast upper band for fast growers','Prioritise brands growing above portfolio; rationalise long-tail SKUs','Watch tender and institutional cycles separately from retail sales']},
+engineering:{n:'Engineering & Projects',t:['Convert forecast into order-book and backlog coverage (months of revenue booked)','Time quotations ahead of fiscal-year-end capex spending','Bundle AMC/service contracts to smooth lumpy project revenue','Track win-rate by segment against forecast demand']},
+it:{n:'IT & Software',t:['Split recurring (subscriptions, AMC) from project revenue and forecast each','Plan bench and hiring from the forecast upper band to avoid delivery gaps','Expand top accounts through upsell: 3-5% net expansion compounds fast','Reduce churn: renewal calendars 90 days ahead']},
+services:{n:'Professional Services',t:['Forecast billable utilisation along with revenue: capacity is the constraint','Move one-off engagements to retainers for predictable cash flow','Raise rates on in-demand services; discount only against volume commitments','Build a referral loop from top clients']},
+manufacturing:{n:'Manufacturing',t:['Use the forecast for production planning and raw-material buying ahead of peak months','Run promotions and dealer schemes in trough months to level capacity','Cut working capital: align inventory with the forecast band, not last year\'s peak','Review product mix: shift capacity to higher-margin, faster-growing lines']},
+education:{n:'Education & Training',t:['Front-load marketing 8-12 weeks before admission/enrolment peaks','Add short, online or weekend formats for trough months','Build corporate / in-company programs for stable demand','Use alumni and member pricing to lift repeat enrolment']},
+retail:{n:'Retail & FMCG',t:['Plan promotions and stock around festive and seasonal peaks','Rank SKUs by growth and margin; trim the tail','Use distributor-level data to spot regional decline early','Test price points: small increases on inelastic items']}};
+let ST={cur:'INR',ind:'general',h:12,meth:'auto',extra:0,tab:0,rows:[],hd:[],map:{},fn:'',sg:{}},D=null;
+const $=id=>document.getElementById(id),esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const N0=v=>Math.round(v).toLocaleString('en-IN'),P=x=>(x>=0?'+':'')+(x*100).toFixed(1)+'%';
+function F(v){const a=Math.abs(v),s=v<0?'-':'';if(ST.cur=='INR')return s+'₹'+(a>=1e7?(a/1e7).toFixed(2)+' Cr':a>=1e5?(a/1e5).toFixed(2)+' L':N0(a));try{return new Intl.NumberFormat('en-US',{style:'currency',currency:ST.cur,notation:'compact',maximumFractionDigits:2}).format(v)}catch(e){return N0(v)}}
+const lab=k=>MN[k%12]+" '"+String(Math.floor(k/12)).slice(2);
+/* ---------- parsing ---------- */
+function csv(t){const l=t.split(/\r?\n/)[0],dl=[',','\t',';'].map(d=>[d,l.split(d).length]).sort((a,b)=>b[1]-a[1])[0][0],R=[];let r=[],c='',q=0;
+ for(let i=0;i<t.length;i++){const h=t[i];if(q){if(h=='"'){if(t[i+1]=='"'){c+='"';i++}else q=0}else c+=h}else if(h=='"')q=1;else if(h==dl){r.push(c);c=''}else if(h=='\n'||h=='\r'){if(h=='\r'&&t[i+1]=='\n')i++;r.push(c);c='';R.push(r);r=[]}else c+=h}
+ if(c||r.length){r.push(c);R.push(r)}return R.filter(r=>r.some(x=>String(x).trim()))}
+function pNum(v){if(typeof v=='number')return v;const s=String(v??'').trim();if(!/^[\s(₹$€£\-+]*\d[\d,]*\.?\d*\)?\s*$/.test(s))return NaN;const x=parseFloat(s.replace(/[^0-9.]/g,''));return /^\(|^\s*-/.test(s)?-x:x}
+const MI=n=>MN.findIndex(m=>n.slice(0,3).toLowerCase()==m.toLowerCase());
+function pDate(v){if(v instanceof Date)return v;const s=String(v??'').trim();let m;
+ if(m=s.match(/^(\d{4})[-\/.](\d{1,2})(?:[-\/.](\d{1,2}))?/))return +m[2]<13?new Date(+m[1],m[2]-1,+m[3]||1):null;
+ if(m=s.match(/^(\d{1,2})[-\/.](\d{1,2})[-\/.](\d{2,4})/)){let d=+m[1],mo=+m[2],y=+m[3];if(y<100)y+=2000;if(mo>12){[d,mo]=[mo,d]}return mo<13?new Date(y,mo-1,d):null}
+ if(m=s.match(/^([A-Za-z]{3,9})[-\s,'\/]*(\d{2,4})$/)){const i=MI(m[1]);if(i<0)return null;let y=+m[2];if(y<100)y+=2000;return new Date(y,i,1)}
+ if(m=s.match(/^(\d{1,2})[-\s]([A-Za-z]{3,9})[-\s,]*(\d{2,4})$/)){const i=MI(m[2]);if(i<0)return null;let y=+m[3];if(y<100)y+=2000;return new Date(y,i,1)}return null}
+function detect(){const H=ST.hd,R=ST.rows.slice(0,200),M={};const col=j=>R.map(r=>r[j]).filter(x=>String(x??'').trim()!=='');
+ const sc=H.map((h,j)=>{const c=col(j),n=c.length||1;return{j,d:c.filter(x=>pDate(x)).length/n,nm:c.filter(x=>!isNaN(pNum(x))).length/n,u:new Set(c).size,h}});
+ const dc=sc.filter(s=>s.d>.8).sort((a,b)=>b.d-a.d)[0];if(dc)M.date=dc.j;
+ const nc=sc.filter(s=>s.nm>.8&&s.j!=M.date);const pref=nc.find(s=>/revenue|sales|amount|turnover|income|value|net|total/i.test(s.h)&&!/unit|qty|quantity/i.test(s.h))||nc.filter(s=>!/unit|qty|quantity|volume|price|rate|id$/i.test(s.h)).pop()||nc.pop();if(pref)M.val=pref.j;
+ const un=nc.find(s=>/unit|qty|quantity|volume/i.test(s.h));if(un)M.units=un.j;
+ const tc=sc.filter(s=>s.nm<=.8&&s.d<=.8&&s.u>=2&&s.u<=60);M.cat=(tc.find(s=>/product|categor|segment|service|region|item|offering|type|brand|line|customer|name/i.test(s.h))||tc[0]||{}).j;return M}
+function load(text,name){let R=csv(text);if(R.length<2){alert('No data rows found');return}ST.hd=R[0].map(x=>String(x).trim());ST.rows=R.slice(1).map(r=>ST.hd.map((_,j)=>r[j]??''));ST.fn=name;ST.sg={};
+ let M=detect();
+ if(M.date==null){const idx=ST.hd.map((h,j)=>j&&pDate(h)?j:0).filter(Boolean);if(idx.length>=3){const rows=[];ST.rows.forEach(r=>idx.forEach(j=>rows.push([r[0],ST.hd[j],r[j]])));ST.hd=[ST.hd[0]||'Item','Period','Value'];ST.rows=rows;M={cat:0,date:1,val:2}}}
+ ST.map=M;go()}
+function go(){compute();ST.tab=D?1:0;draw()}
+/* ---------- forecasting ---------- */
+function ols(y){const n=y.length;let sx=0,sy=0,sxy=0,sxx=0;y.forEach((v,i)=>{sx+=i;sy+=v;sxy+=i*v;sxx+=i*i});const b=(n*sxy-sx*sy)/(n*sxx-sx*sx||1);return[(sy-b*sx)/n,b]}
+function seas(y,m0){let s=Array(12).fill(0);for(let it=0;it<3;it++){const[a,b]=ols(y.map((v,i)=>v-s[(m0+i)%12])),sm=Array(12).fill(0),cn=Array(12).fill(0);y.forEach((v,i)=>{const k=(m0+i)%12;sm[k]+=v-a-b*i;cn[k]++});s=sm.map((x,k)=>cn[k]?x/cn[k]:0);const mu=s.reduce((a,b)=>a+b)/12;s=s.map(x=>x-mu)}return s}
+const avg=a=>a.reduce((x,y)=>x+y,0)/(a.length||1);
+function fc(y,h,m0,me){const n=y.length,o=[];
+ if(me=='hw'&&n>=24){const L0=avg(y.slice(0,12));let l=L0,t=(avg(y.slice(12,24))-L0)/12;const s=y.slice(0,12).map(v=>v-L0);for(let i=12;i<n;i++){const nl=.3*(y[i]-s[i-12])+.7*(l+t);t=.1*(nl-l)+.9*t;s[i]=.3*(y[i]-nl)+.7*s[i-12];l=nl}for(let k=1;k<=h;k++)o.push(l+k*t+s[n-12+((k-1)%12)])}
+ else if(me=='seasonal'&&n>=18){const s=seas(y,m0),[a,b]=ols(y.map((v,i)=>v-s[(m0+i)%12]));for(let i=0;i<h;i++)o.push(a+b*(n+i)+s[(m0+n+i)%12])}
+ else{const[a,b]=ols(y);for(let i=0;i<h;i++)o.push(a+b*(n+i))}return o.map(v=>Math.max(0,v))}
+function pick(y,m0,me,h){const n=y.length,ok=(m,len)=>m=='trend'||(m=='seasonal'&&len>=18)||(m=='hw'&&len>=24),cand=['trend','seasonal','hw'].filter(m=>ok(m,n)),ho=Math.min(6,Math.floor(n/4)),res={};
+ if(ho>=2)cand.forEach(m=>{if(!ok(m,n-ho))return;const f=fc(y.slice(0,n-ho),ho,m0,m);let e=0,a=0;const er=[];f.forEach((v,i)=>{const x=y[n-ho+i];e+=Math.abs(v-x);a+=Math.abs(x);er.push(x-v)});res[m]={w:e/(a||1),er}});
+ let m=me;if(me=='auto')m=Object.keys(res).sort((a,b)=>res[a].w-res[b].w)[0]||cand[cand.length-1];else if(!cand.includes(me))m=cand[cand.length-1];
+ let sg;if(res[m])sg=Math.sqrt(avg(res[m].er.map(x=>x*x)));else{const[a,b]=ols(y);sg=Math.sqrt(avg(y.map((v,i)=>(v-a-b*i)**2)))}
+ return{m,f:fc(y,h,m0,m),w:res[m]?res[m].w:null,sg}}
+const adj=(f,i)=>f*(1+ST.extra/100*(i+1)/12);
+function compute(){D=null;const M=ST.map,R=ST.rows;if(!R.length||M.val==null)return;let bad=0;
+ if(M.date==null){const c={};R.forEach(r=>{const v=pNum(r[M.val]);if(isNaN(v)){bad++;return}const k=M.cat!=null?String(r[M.cat]).trim()||'(blank)':'Total';c[k]=(c[k]||0)+v});D={mode:'snap',bad,rows:R.length,cats:Object.entries(c).map(([n,v])=>({n,v})).sort((a,b)=>b.v-a.v)};return}
+ const T={},C={};let lo=1e9,hi=-1;
+ R.forEach(r=>{const d=pDate(r[M.date]),v=pNum(r[M.val]);if(!d||isNaN(v)){bad++;return}const k=d.getFullYear()*12+d.getMonth();lo=Math.min(lo,k);hi=Math.max(hi,k);T[k]=(T[k]||0)+v;if(M.cat!=null){const c=String(r[M.cat]).trim()||'(blank)';(C[c]=C[c]||{})[k]=(C[c][k]||0)+v}});
+ if(hi<0)return;const n=hi-lo+1,ser=o=>Array.from({length:n},(_,i)=>o[lo+i]||0),y=ser(T),m0=lo%12,pr=pick(y,m0,ST.meth,24);
+ const l12=a=>a.length>=12?a.slice(-12).reduce((x,z)=>x+z,0):avg(a)*12,sm12=a=>a.slice(0,12).reduce((x,z)=>x+adj(z,0),0);
+ const f=pr.f.map(adj);let names=Object.keys(C).sort((a,b)=>Object.values(C[b]).reduce((x,z)=>x+z,0)-Object.values(C[a]).reduce((x,z)=>x+z,0));
+ const cats=names.slice(0,8).map(nm=>{const yy=ser(C[nm]),p=pick(yy,m0,ST.meth,24),ff=p.f.map(adj),l=l12(yy),nx=ff.slice(0,12).reduce((x,z)=>x+z,0);return{n:nm,y:yy,p,l,nx,g:l>0?nx/l-1:0}});
+ const last12=l12(y),n12=f.slice(0,12).reduce((x,z)=>x+z,0);
+ D={mode:'ts',lo,n,y,m0,pr,f,cats,bad,rows:R.length,last12,n12,g:last12>0?n12/last12-1:0,yoy:n>=24?last12/y.slice(-24,-12).reduce((x,z)=>x+z,0)-1:null,more:names.length>8}}
+/* ---------- charts ---------- */
+function line(y,f,sg,lo){const W=640,H=270,pl=56,pb=26,pt=12,N=y.length+f.length,up=f.map((v,i)=>v+1.28*sg*(1+.05*i)),mx=Math.max(...up,...y)*1.08,X=i=>pl+(W-pl-6)*i/(N-1),Y=v=>pt+(H-pt-pb)*(1-v/mx);let o=`<svg viewBox="0 0 ${W} ${H}">`;
+ for(let i=0;i<=4;i++){const yy=pt+(H-pt-pb)*(1-i/4);o+=`<line x1="${pl}" x2="${W}" y1="${yy}" y2="${yy}" stroke="var(--line)"/><text x="${pl-4}" y="${yy+3}" text-anchor="end">${F(mx*i/4)}</text>`}
+ const yl=y.length;o+=`<polygon fill="var(--b)" opacity=".18" points="${up.map((v,i)=>X(yl+i)+','+Y(v)).join(' ')} ${f.map((v,i)=>[X(yl+i),Y(Math.max(0,v-1.28*sg*(1+.05*i)))]).reverse().join(' ')}"/>`;
+ o+=`<polyline fill="none" stroke="var(--a)" stroke-width="2" points="${y.map((v,i)=>X(i)+','+Y(v)).join(' ')}"/><polyline fill="none" stroke="var(--b)" stroke-width="2" stroke-dasharray="5 3" points="${X(yl-1)},${Y(y[yl-1])} ${f.map((v,i)=>X(yl+i)+','+Y(v)).join(' ')}"/>`;
+ const st=Math.ceil(N/8);for(let i=0;i<N;i+=st)o+=`<text x="${X(i)}" y="${H-8}" text-anchor="middle">${lab(lo+i)}</text>`;
+ return o+`</svg><div class="lg"><span><i style="background:var(--a)"></i>Actual</span><span><i style="background:var(--b)"></i>Forecast</span><span><i style="background:var(--b);opacity:.3"></i>80% range</span></div>`}
+function gbar(L,sr,f){const W=640,H=250,pl=56,pb=24,pt=14,mx=Math.max(...sr.flatMap(s=>s.v),1)*1.12,n=L.length,bw=(W-pl)/n,w=bw*.72/sr.length;let o=`<svg viewBox="0 0 ${W} ${H}">`;
+ for(let i=0;i<=4;i++){const y=pt+(H-pt-pb)*(1-i/4);o+=`<line x1="${pl}" x2="${W}" y1="${y}" y2="${y}" stroke="var(--line)"/><text x="${pl-4}" y="${y+3}" text-anchor="end">${f(mx*i/4)}</text>`}
+ sr.forEach((s,j)=>s.v.forEach((v,i)=>{const h=(H-pt-pb)*v/mx;o+=`<rect x="${pl+i*bw+bw*.14+j*w}" y="${H-pb-h}" width="${w-1}" height="${h}" rx="2" fill="${s.c}"/>`}));
+ L.forEach((l,i)=>o+=`<text x="${pl+i*bw+bw/2}" y="${H-8}" text-anchor="middle">${esc(String(l).slice(0,10))}</text>`);o+='</svg><div class="lg">'+sr.map(s=>`<span><i style="background:${s.c}"></i>${s.name}</span>`).join('')+'</div>';return o}
+function dev(V){const W=640,H=200,mid=H/2-6,mx=Math.max(...V.map(Math.abs),1)*1.2,bw=(W-10)/12;let o=`<svg viewBox="0 0 ${W} ${H}"><line x1="0" x2="${W}" y1="${mid}" y2="${mid}" stroke="var(--line)"/>`;
+ V.forEach((v,i)=>{const h=Math.abs(v)/mx*(mid-8);o+=`<rect x="${5+i*bw+bw*.15}" y="${v>=0?mid-h:mid}" width="${bw*.7}" height="${h}" rx="2" fill="${v>=0?'var(--a)':'var(--neg)'}"/><text x="${5+i*bw+bw/2}" y="${H-6}" text-anchor="middle">${MN[i]}</text><text x="${5+i*bw+bw/2}" y="${v>=0?mid-h-3:mid+h+10}" text-anchor="middle">${v>0?'+':''}${v.toFixed(0)}%</text>`});return o+'</svg>'}
+function donut(L,V){const t=V.reduce((a,b)=>a+b,0)||1,r=56,ci=2*Math.PI*r;let off=0,o='<div style="display:flex;gap:14px;align-items:center;flex-wrap:wrap"><svg viewBox="0 0 150 150" style="width:150px">';
+ V.forEach((v,i)=>{const d=ci*v/t;o+=`<circle cx="75" cy="75" r="${r}" fill="none" stroke="${COL[i%9]}" stroke-width="26" stroke-dasharray="${d} ${ci-d}" stroke-dashoffset="${-off}" transform="rotate(-90 75 75)"/>`;off+=d});
+ return o+'</svg><div class="lg" style="flex-direction:column;flex:1;min-width:140px">'+L.map((l,i)=>`<span><i style="background:${COL[i%9]}"></i>${esc(l)} · ${(V[i]/t*100).toFixed(0)}%</span>`).join('')+'</div></div>'}
+/* ---------- insights ---------- */
+function insights(){const o=[];
+ if(D.mode=='snap'){const t=D.cats.reduce((a,c)=>a+c.v,0),top=D.cats[0];if(top&&D.cats.length>1&&top.v/t>.4)o.push(['High','Reduce concentration',`${esc(top.n)} contributes ${(top.v/t*100).toFixed(0)}% of revenue. Build the next two lines to cut dependence.`,0]);
+  o.push(['Med','Price realisation','A 2% price or mix improvement across the portfolio is worth the amount shown.',.02*t]);o.push(['Med','Add dates for a true forecast','Include a Date column (monthly or daily, 24+ months ideal) to unlock trend, seasonality and accuracy testing.',0]);return o}
+ const{f,n12,last12,g,cats}=D,mean=n12/12;
+ o.push([g<0?'High':'Med',g<0?'Revenue is projected to decline':g>.15?'Strong momentum: secure capacity':'Steady growth path',`Next-12-month forecast is ${F(n12)} (${P(g)} vs the last 12 months). ${g<0?'Diagnose the segments driving the decline below and set recovery targets.':g>.15?'Make sure supply, people and cash flow can support this pace.':'Focus on mix and pricing to move above trend.'}`,0]);
+ if(D.n>=18){const lows=f.slice(0,12).map((v,i)=>[v,D.lo+D.n+i]).filter(x=>x[0]<.9*mean);if(lows.length){const gain=lows.reduce((a,x)=>a+.5*(mean-x[0]),0);o.push(['High','Lift the trough months',`Forecast is weakest in ${lows.map(x=>MN[x[1]%12]).join(', ')}. Use targeted offers, new formats or channel pushes there; closing half the gap to average adds the amount shown.`,gain])}}
+ if(cats.length>1){const T=cats.reduce((a,c)=>a+c.l,0),top=cats[0];if(top.l/T>.5)o.push(['High','High concentration risk',`${esc(top.n)} is ${(top.l/T*100).toFixed(0)}% of the last-12-month revenue. A shock there moves the whole forecast.`,0]);
+  const dec=cats.filter(c=>c.g<-.02);if(dec.length)o.push(['High','Arrest declining lines',`${dec.map(c=>esc(c.n)+' ('+P(c.g)+')').join(', ')} are forecast to shrink. Recovering half of the decline is worth the amount shown.`,dec.reduce((a,c)=>a+.5*(c.l-c.nx),0)]);
+  const gr=[...cats].sort((a,b)=>b.g-a.g)[0];if(gr.g>.03)o.push(['Med','Double down on the growth leader',`${esc(gr.n)} is projected at ${P(gr.g)}. Extra investment of 10% beyond forecast is the upside shown.`,.1*gr.nx])}
+ o.push(['Med','Price and mix','A 2% net price realisation improvement across the forecast revenue.',.02*n12]);o.push(['Med','Repeat business and cross-sell','A 3% uplift from existing customers (renewals, add-ons, referrals).',.03*n12]);
+ if(D.pr.w==null||D.pr.w>.25||D.n<12)o.push(['Watch','Forecast confidence is limited',D.n<12?`Only ${D.n} months of history; add 24+ months for seasonality and reliable accuracy.`:`Backtest error is ${(D.pr.w*100).toFixed(0)}%. Revenue is volatile: use the range, and re-forecast monthly.`,0]);
+ return o}
+/* ---------- views ---------- */
+const kc=(l,v,s)=>`<div class="card"><div class="kl">${l}</div><div class="kv">${v}</div><div class="kd">${s}</div></div>`;
+const need='<div class="card">Upload or load a dataset first on the <b>Data</b> tab.</div>';
+function vData(){const H=ST.hd,M=ST.map,sel=(k,l,opt)=>`<label style="display:block;margin:4px 0">${l} <select data-m="${k}">${opt?'<option value="">none</option>':''}${H.map((h,j)=>`<option value="${j}" ${M[k]==j?'selected':''}>${esc(h)}</option>`).join('')}</select></label>`;
+ return`<div class="g c2"><div class="card"><h2>1 · Load your data</h2><div class="drop"><input type="file" id="fi" accept=".csv,.tsv,.txt,.xlsx,.xls"><div class="kd" style="margin-top:8px">CSV, TSV or Excel (first sheet)</div></div>
+ <div style="margin-top:10px"><b style="font-size:13px">or try a sample:</b> <select id="sm"><option value="">Choose industry…</option>${SAMP.map((s,i)=>`<option value="${i}">${s.n}</option>`).join('')}</select></div>
+ <div style="margin-top:10px"><textarea id="pt" rows="4" style="width:100%" placeholder="…or paste CSV here (Date,Product,Revenue)"></textarea><button class="btn o" id="pb" style="margin-top:6px">Analyse pasted data</button></div></div>
+ <div class="card"><h2>Expected format</h2><ul><li><b>Long:</b> Date, Product/Service, Revenue (optional Units)</li><li><b>Wide:</b> first column = product, other columns = months (Apr-25, May-25…)</li><li><b>Snapshot:</b> Product, Revenue (no dates)</li><li>Daily, weekly or monthly rows are rolled up to months. Amounts like ₹1,20,000 or (500) are handled.</li><li>24+ months of history gives the best, seasonality-aware forecast.</li></ul></div></div>
+ ${ST.rows.length?`<div class="card" style="margin-top:12px"><h2>2 · Column mapping <span class="kd">(${esc(ST.fn)}, ${ST.rows.length} rows)</span></h2>${sel('date','Date column',1)}${sel('val','Revenue / value column')}${sel('cat','Product / segment column',1)}
+ ${D?`<div class="kd">${D.mode=='ts'?`Detected ${D.n} months (${lab(D.lo)} to ${lab(D.lo+D.n-1)})`:'No date column: snapshot mode'}${D.bad?` · <span class="warn">${D.bad} rows skipped (invalid date/amount)</span>`:''}</div>`:'<div class="warn">Pick a numeric revenue column.</div>'}
+ <div class="sc" style="margin-top:8px"><table><tr>${H.map(h=>`<th>${esc(h)}</th>`).join('')}</tr>${ST.rows.slice(0,5).map(r=>`<tr>${r.map(c=>`<td>${esc(c)}</td>`).join('')}</tr>`).join('')}</table></div></div>`:''}`}
+function vFc(){if(!D)return need;if(D.mode=='snap')return vSnap();const{pr,f}=D,h=ST.h,sg=pr.sg,MD={trend:'Linear trend',seasonal:'Seasonal trend',hw:'Holt-Winters'};
+ const sv=D.n>=18?seas(D.y,D.m0):null,mean=avg(D.y),pk=sv?sv.indexOf(Math.max(...sv)):null,tr=sv?sv.indexOf(Math.min(...sv)):null;
+ return`<div class="g k">${kc('Last 12 months',F(D.last12),D.n<12?'annualised from '+D.n+' months':lab(D.lo+D.n-12)+' to '+lab(D.lo+D.n-1))}${kc('Next 12 months',F(D.n12),`<span class="${D.g>=0?'pos':'neg'}">${P(D.g)}</span> vs last 12`)}${kc('Forecast to '+lab(D.lo+D.n+h-1),F(f.slice(0,h).reduce((a,b)=>a+b,0)),h+' months')}${kc('Historical growth',D.yoy==null?'n/a':P(D.yoy),'year on year')}${kc('Accuracy (backtest)',pr.w==null?'n/a':((1-Math.min(pr.w,1))*100).toFixed(0)+'%',MD[pr.m])}${kc('Peak / trough',sv?MN[pk]+' / '+MN[tr]:'n/a','seasonal months')}</div>
+ <div class="g c2" style="margin-top:12px"><div class="card" style="grid-column:1/-1"><h2>Actual and forecast revenue</h2>${line(D.y,f.slice(0,h),sg,D.lo)}</div>
+ <div class="card"><h2>Seasonality (% vs average month)</h2>${sv?dev(sv.map(s=>s/(mean||1)*100)):'<div class="kd">Needs 18+ months of data.</div>'}</div>
+ <div class="card sc"><h2>Monthly forecast</h2><table><tr><th>Month</th><th>Forecast</th><th>Low</th><th>High</th></tr>${f.slice(0,h).map((v,i)=>{const b=1.28*sg*(1+.05*i);return`<tr><td>${lab(D.lo+D.n+i)}</td><td>${F(v)}</td><td>${F(Math.max(0,v-b))}</td><td>${F(v+b)}</td></tr>`}).join('')}</table></div></div>`}
+function vSeg(){if(!D)return need;if(D.mode=='snap')return vSnap();if(!D.cats.length)return'<div class="card">No product/segment column selected. Map one on the Data tab to see segment forecasts.</div>';const c=D.cats;
+ return`<div class="g c2"><div class="card"><h2>Last 12 months vs next 12 months</h2>${gbar(c.map(x=>x.n),[{name:'Last 12M',c:'#8a8f8c',v:c.map(x=>x.l)},{name:'Next 12M',c:'var(--a)',v:c.map(x=>x.nx)}],F)}</div><div class="card"><h2>Forecast revenue mix</h2>${donut(c.map(x=>x.n),c.map(x=>x.nx))}</div></div>
+ <div class="card sc" style="margin-top:12px"><table><tr><th>Segment</th><th>Last 12M</th><th>Next 12M</th><th>Growth</th><th>Share</th><th>Model</th><th>Accuracy</th></tr>${c.map(x=>`<tr><td>${esc(x.n)}</td><td>${F(x.l)}</td><td>${F(x.nx)}</td><td class="${x.g>=0?'pos':'neg'}">${P(x.g)}</td><td>${(x.nx/(D.n12||1)*100).toFixed(0)}%</td><td>${x.p.m}</td><td>${x.p.w==null?'n/a':((1-Math.min(x.p.w,1))*100).toFixed(0)+'%'}</td></tr>`).join('')}</table>${D.more?'<div class="note">Top 8 segments shown; the total forecast covers all.</div>':''}</div>`}
+function vSnap(){const c=D.cats,t=c.reduce((a,x)=>a+x.v,0);const gr=x=>ST.sg[x.n]??8,tot=y=>c.reduce((a,x)=>a+x.v*Math.pow(1+(gr(x)+ST.extra)/100,y),0);
+ return`<div class="card" style="margin-bottom:12px"><b>Snapshot mode</b> (no date column): enter an expected annual growth per line. Add dates for statistical forecasting.</div><div class="g c2"><div class="card"><h2>Projected total revenue</h2>${gbar(['Current','Year 1','Year 2','Year 3'],[{name:'Revenue',c:'var(--a)',v:[0,1,2,3].map(tot)}],F)}</div><div class="card"><h2>Mix</h2>${donut(c.map(x=>x.n),c.map(x=>x.v))}</div></div>
+ <div class="card sc" style="margin-top:12px"><table><tr><th>Segment</th><th>Revenue</th><th>Growth %/yr</th><th>Year 1</th><th>Year 3</th></tr>${c.map(x=>`<tr><td>${esc(x.n)}</td><td>${F(x.v)}</td><td><input type="number" style="width:70px" value="${gr(x)}" data-g="${esc(x.n)}"></td><td>${F(x.v*(1+(gr(x)+ST.extra)/100))}</td><td>${F(x.v*Math.pow(1+(gr(x)+ST.extra)/100,3))}</td></tr>`).join('')}</table></div>`}
+function vPlan(){if(!D)return need;const L=insights(),tot=L.reduce((a,x)=>a+x[3],0),base=D.mode=='ts'?D.n12:D.cats.reduce((a,c)=>a+c.v,0),I=IND[ST.ind];
+ return`<div class="card" style="margin-bottom:12px"><div class="kl">Identified annual upside</div><div class="up" style="font-size:26px">${F(tot)}</div><div class="kd">≈ ${(tot/(base||1)*100).toFixed(1)}% of forecast revenue · levers may overlap, so treat as an upper-range estimate</div></div>
+ <div class="g c2">${L.map(x=>`<div class="card rec ${x[0]=='High'||x[0]=='Watch'?'h':''}"><h2>${x[1]}<span class="tag">${x[0]}</span></h2><div style="font-size:13.5px">${x[2]}</div>${x[3]?`<div class="up" style="margin-top:6px">+${F(x[3])}</div>`:''}</div>`).join('')}
+ <div class="card" style="grid-column:1/-1"><h2>${I.n} playbook</h2><ul>${I.t.map(t=>`<li>${t}</li>`).join('')}</ul></div></div>`}
+const TB=['Data','Forecast','Segments','Growth plan'],VW=[vData,vFc,vSeg,vPlan];
+function draw(){$('tabs').innerHTML=TB.map((t,i)=>`<button class="${i==ST.tab?'on':''}" onclick="ST.tab=${i};draw()">${t}</button>`).join('');$('v').innerHTML=VW[ST.tab]();
+ const fi=$('fi');if(fi)fi.onchange=e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();if(/\.xlsx?$/i.test(f.name)){if(typeof XLSX=='undefined'){alert('Excel reader could not load. Save as CSV and retry.');return}r.onload=ev=>{const wb=XLSX.read(ev.target.result,{type:'array',cellDates:true});load(XLSX.utils.sheet_to_csv(wb.Sheets[wb.SheetNames[0]],{dateNF:'yyyy-mm-dd'}),f.name)};r.readAsArrayBuffer(f)}else{r.onload=ev=>load(ev.target.result,f.name);r.readAsText(f)}};
+ const sm=$('sm');if(sm)sm.onchange=e=>{if(e.target.value!=='')sample(+e.target.value)};
+ const pb=$('pb');if(pb)pb.onclick=()=>load($('pt').value,'pasted data');
+ document.querySelectorAll('select[data-m]').forEach(e=>e.onchange=()=>{ST.map[e.dataset.m]=e.value===''?null:+e.value;compute();draw()});
+ document.querySelectorAll('input[data-g]').forEach(e=>e.onchange=()=>{ST.sg[e.dataset.g]=+e.value||0;draw()})}
+/* ---------- samples ---------- */
+const SAMP=[{n:'Pharma: 4 brands, winter peak',i:'pharma',p:['Cardio','Diabetes','Anti-infectives','Oncology'],s:[.3,.3,.25,.15],g:[.06,.14,.02,.22],a:.18,pk:0,b:2.4e7},
+{n:'Engineering: projects & service',i:'engineering',p:['Capital equipment','Spares','AMC / Service'],s:[.55,.2,.25],g:[.05,.1,.16],a:.25,pk:2,b:4e7},
+{n:'IT: software & services',i:'it',p:['Subscriptions','Projects','Support'],s:[.4,.4,.2],g:[.28,.08,.12],a:.06,pk:2,b:3e7},
+{n:'Professional services',i:'services',p:['Consulting','Audit','Training'],s:[.5,.3,.2],g:[.1,.03,.15],a:.15,pk:2,b:1.5e7},
+{n:'Manufacturing: 4 product lines',i:'manufacturing',p:['Pumps','Valves','Motors','Castings'],s:[.3,.25,.3,.15],g:[.08,-.04,.12,.02],a:.14,pk:9,b:5e7},
+{n:'Education: courses & programs',i:'education',p:['Short programs','Diplomas','Corporate training','Events'],s:[.3,.25,.3,.15],g:[.1,.05,.18,.12],a:.3,pk:1,b:4.5e6}];
+function sample(i){const s=SAMP[i];let z=7+i*13;const rnd=()=>{z=(z+0x6D2B79F5)|0;let t=Math.imul(z^z>>>15,1|z);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296};let o='Date,Product,Units,Revenue\n';
+ for(let t=0;t<36;t++){const d=new Date(2023,3+t,1),m=d.getMonth();s.p.forEach((p,j)=>{const r=s.b*s.s[j]*Math.pow(1+s.g[j],t/12)*(1+s.a*Math.cos(2*Math.PI*(m-s.pk)/12))*(.92+.16*rnd());o+=`${d.toISOString().slice(0,7)}-01,${p},${Math.round(r/(900+j*300))},${Math.round(r)}\n`})}
+ ST.ind=s.i;$('ind').value=s.i;ST.cur='INR';$('cur').value='INR';load(o,'sample: '+s.n)}
+/* ---------- init ---------- */
+$('cur').innerHTML=CUR.map(c=>`<option>${c}</option>`).join('');$('ind').innerHTML=Object.entries(IND).map(([k,v])=>`<option value="${k}">${v.n}</option>`).join('');
+$('cur').onchange=e=>{ST.cur=e.target.value;draw()};$('ind').onchange=e=>{ST.ind=e.target.value;draw()};
+$('hz').onchange=e=>{ST.h=+e.target.value;draw()};$('me').onchange=e=>{ST.meth=e.target.value;compute();draw()};
+$('ex').oninput=e=>{ST.extra=+e.target.value;$('exv').textContent=ST.extra+'%';compute();draw()};
+draw();
+</script></body></html>
